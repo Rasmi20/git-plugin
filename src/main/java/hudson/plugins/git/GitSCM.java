@@ -52,6 +52,7 @@ import hudson.scm.RepositoryBrowser;
 import hudson.scm.SCMDescriptor;
 import hudson.scm.SCMRevisionState;
 import hudson.security.ACL;
+import hudson.slaves.EnvironmentVariablesNodeProperty;
 import hudson.tasks.Builder;
 import hudson.tasks.Publisher;
 import hudson.triggers.SCMTrigger;
@@ -816,9 +817,14 @@ public class GitSCM extends GitSCMBackwardCompatibility {
     /*package*/ GitClient createClient(TaskListener listener, EnvVars environment, Job project, Node n, FilePath ws) throws IOException, InterruptedException {
 
         String gitExe = getGitExe(n, listener);
-        Git git = Git.with(listener, environment).in(ws).using(gitExe);
 
+        Git git = Git.with(listener, environment).in(ws).using(gitExe);
         GitClient c = git.getClient();
+
+        if (shouldProxy(n) == false)
+            c.setProxy(null);
+
+
         for (GitSCMExtension ext : extensions) {
             c = ext.decorate(this,c);
         }
@@ -849,6 +855,23 @@ public class GitSCM extends GitSCMBackwardCompatibility {
         // TODO add default credentials
 
         return c;
+    }
+
+    private boolean shouldProxy(Node n) {
+        boolean shouldProxy = true;
+
+        List<EnvironmentVariablesNodeProperty> props = n.getNodeProperties().getAll(EnvironmentVariablesNodeProperty.class);
+        if (props.isEmpty() == false) {
+            for (EnvironmentVariablesNodeProperty evnp: props) {
+                EnvVars envvs = evnp.getEnvVars();
+
+                if (envvs.get("use_proxy", "false").equals("false")) {
+                    shouldProxy = false;
+                    break;
+                }
+            }
+        }
+        return shouldProxy;
     }
 
     @NonNull
